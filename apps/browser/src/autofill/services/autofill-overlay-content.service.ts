@@ -852,7 +852,16 @@ export class AutofillOverlayContentService implements AutofillOverlayContentServ
    */
   private handleFormFieldInputEvent = (formFieldElement: ElementWithOpId<FormFieldElement>) => {
     return this.useEventHandlersMemo(
-      debounce(() => this.triggerFormFieldInput(formFieldElement), 100, true),
+      debounce(
+        (...args: unknown[]) => {
+          const event = args[0];
+          const isTrustedEvent = event instanceof Event && EventSecurity.isEventTrusted(event);
+
+          return this.triggerFormFieldInput(formFieldElement, isTrustedEvent);
+        },
+        100,
+        true,
+      ),
       this.getFormFieldHandlerMemoIndex(formFieldElement, EVENTS.INPUT),
     );
   };
@@ -864,8 +873,13 @@ export class AutofillOverlayContentService implements AutofillOverlayContentServ
    * itself down to the matching ciphers.
    *
    * @param formFieldElement - The form field element that triggered the input event.
+   * @param isTrustedEvent - Whether the input came from the user agent rather than
+   * from script running on the page.
    */
-  private async triggerFormFieldInput(formFieldElement: ElementWithOpId<FormFieldElement>) {
+  private async triggerFormFieldInput(
+    formFieldElement: ElementWithOpId<FormFieldElement>,
+    isTrustedEvent: boolean,
+  ) {
     if (!elementIsFillableFormField(formFieldElement)) {
       return;
     }
@@ -879,7 +893,7 @@ export class AutofillOverlayContentService implements AutofillOverlayContentServ
     }
 
     await this.sendExtensionMessage("updateAutofillInlineMenuFilterQuery", {
-      filterQuery: this.getInlineMenuFilterQuery(formFieldElement),
+      filterQuery: isTrustedEvent ? this.getInlineMenuFilterQuery(formFieldElement) : "",
     });
 
     if (!formFieldElement?.value) {
@@ -893,6 +907,11 @@ export class AutofillOverlayContentService implements AutofillOverlayContentServ
    * The contents of a password field are never used: they are a secret, and
    * passing them to the menu frame would spread that secret for no benefit,
    * since the list matches on item names and usernames.
+   *
+   * Only ever reached for trusted events. The list reports its height back to
+   * the iframe in the page's own DOM, so a page able to filter with scripted
+   * input could read how many items matched a string it chose, and enumerate
+   * item names and usernames a character at a time.
    *
    * @param formFieldElement - The field that received the input event.
    * @returns The query to filter by, or an empty string to show everything.
@@ -1477,7 +1496,7 @@ export class AutofillOverlayContentService implements AutofillOverlayContentServ
       return;
     }
     this.handleHiddenElementFallbackEvent(formFieldElement);
-    await this.triggerFormFieldInput(formFieldElement);
+    await this.triggerFormFieldInput(formFieldElement, EventSecurity.isEventTrusted(event));
   };
 
   /**

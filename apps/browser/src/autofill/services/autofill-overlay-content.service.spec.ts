@@ -593,6 +593,33 @@ describe("AutofillOverlayContentService", () => {
           );
         });
 
+        it("does not filter on scripted input, which would let the page probe the list", async () => {
+          // The suite stubs isEventTrusted to true so synthetic events reach the
+          // handlers at all. This case is specifically about the real check, so
+          // restore it: an event a page dispatches is untrusted.
+          jest
+            .spyOn(EventSecurity, "isEventTrusted")
+            .mockImplementation((event: Event) => event.isTrusted);
+          (autofillFieldElement as HTMLInputElement).value = "admin";
+
+          await autofillOverlayContentService.setupOverlayListeners(
+            autofillFieldElement,
+            autofillFieldData,
+            pageDetailsMock,
+          );
+          autofillFieldElement.dispatchEvent(new Event("input"));
+          await flushPromises();
+
+          expect(sendExtensionMessageSpy).toHaveBeenCalledWith(
+            "updateAutofillInlineMenuFilterQuery",
+            { filterQuery: "" },
+          );
+          expect(sendExtensionMessageSpy).not.toHaveBeenCalledWith(
+            "updateAutofillInlineMenuFilterQuery",
+            { filterQuery: "admin" },
+          );
+        });
+
         it("opens the inline menu if the field does not have a value", async () => {
           await autofillOverlayContentService.setupOverlayListeners(
             autofillFieldElement,
