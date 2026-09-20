@@ -93,6 +93,8 @@ export class AutofillInlineMenuList extends AutofillInlineMenuPageElement {
       updateAutofillInlineMenuListCiphers: ({ message }) => this.updateListItems(message),
       updateAutofillInlineMenuGeneratedPassword: ({ message }) =>
         this.handleUpdateAutofillInlineMenuGeneratedPassword(message),
+      updateAutofillInlineMenuFilterQuery: ({ message }) =>
+        this.updateFilterQuery(message.filterQuery),
       showSaveLoginInlineMenuList: () => this.handleShowSaveLoginInlineMenuList(),
       focusAutofillInlineMenuList: () => this.focusInlineMenuList(),
     };
@@ -137,6 +139,8 @@ export class AutofillInlineMenuList extends AutofillInlineMenuPageElement {
     this.inlineMenuFillType = inlineMenuFillType;
     this.showPasskeysLabels = showPasskeysLabels;
     this.useLitComponents = useLitComponents;
+    // A fresh menu starts unfiltered; the query belongs to the field it was typed in.
+    this.filterQuery = "";
     if (useLitComponents) {
       this.theme = resolveTheme(theme);
     }

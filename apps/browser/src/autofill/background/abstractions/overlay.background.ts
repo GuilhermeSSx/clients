@@ -159,6 +159,8 @@ export type OverlayBackgroundExtensionMessage = {
   data?: LockedVaultPendingNotificationsData;
   iframeSrc?: string;
   iframeTargetedFields?: { selector: string; fieldType: string; formCategory?: string }[];
+  /** Text typed into the focused field, used to narrow the inline menu list. */
+  filterQuery?: string;
 } & OverlayAddNewItemMessage &
   CloseInlineMenuMessage &
   ToggleInlineMenuHiddenMessage &
@@ -248,6 +250,10 @@ export type OverlayBackgroundExtensionMessageHandlers = {
   updateIsFieldCurrentlyFocused: ({ message, sender }: BackgroundOnMessageHandlerParams) => void;
   checkIsFieldCurrentlyFocused: () => boolean;
   updateIsFieldCurrentlyFilling: ({ message }: BackgroundMessageParam) => void;
+  updateAutofillInlineMenuFilterQuery: ({
+    message,
+    sender,
+  }: BackgroundOnMessageHandlerParams) => void;
   checkIsFieldCurrentlyFilling: () => boolean;
   getAutofillInlineMenuVisibility: () => void;
   openAutofillInlineMenu: ({ message, sender }: BackgroundOnMessageHandlerParams) => Promise<void>;

@@ -23,7 +23,6 @@ import {
 import { AutofillExtensionMessage } from "../content/abstractions/autofill-init";
 import { AutofillFieldQualifier, AutofillFieldQualifierType } from "../enums/autofill-field.enums";
 import {
-  AutofillOverlayElement,
   InlineMenuAccountCreationFieldType,
   InlineMenuFillTypes,
   MAX_SUB_FRAME_DEPTH,
@@ -37,6 +36,7 @@ import {
   currentlyInSandboxedIframe,
   debounce,
   elementIsFillableFormField,
+  elementIsInputElement,
   elementIsSelectElement,
   getAttributeBoolean,
   isReadonlyOrDisabledFormFieldElement,
@@ -860,7 +860,8 @@ export class AutofillOverlayContentService implements AutofillOverlayContentServ
   /**
    * Triggers when the form field element receives an input event. This method will
    * store the modified form element data for use when the user attempts to add a new
-   * vault item. It also acts to remove the inline menu list while the user is typing.
+   * vault item. It also relays what was typed so the inline menu list can narrow
+   * itself down to the matching ciphers.
    *
    * @param formFieldElement - The form field element that triggered the input event.
    */
@@ -877,14 +878,33 @@ export class AutofillOverlayContentService implements AutofillOverlayContentServ
       return;
     }
 
-    await this.sendExtensionMessage("closeAutofillInlineMenu", {
-      overlayElement: AutofillOverlayElement.List,
-      forceCloseInlineMenu: true,
+    await this.sendExtensionMessage("updateAutofillInlineMenuFilterQuery", {
+      filterQuery: this.getInlineMenuFilterQuery(formFieldElement),
     });
 
     if (!formFieldElement?.value) {
       await this.sendExtensionMessage("openAutofillInlineMenu");
     }
+  }
+
+  /**
+   * Returns the text that should narrow the inline menu list for a field.
+   *
+   * The contents of a password field are never used: they are a secret, and
+   * passing them to the menu frame would spread that secret for no benefit,
+   * since the list matches on item names and usernames.
+   *
+   * @param formFieldElement - The field that received the input event.
+   * @returns The query to filter by, or an empty string to show everything.
+   */
+  private getInlineMenuFilterQuery(
+    formFieldElement: ElementWithOpId<FillableFormFieldElement>,
+  ): string {
+    if (elementIsInputElement(formFieldElement) && formFieldElement.type === "password") {
+      return "";
+    }
+
+    return formFieldElement.value ?? "";
   }
 
   /**

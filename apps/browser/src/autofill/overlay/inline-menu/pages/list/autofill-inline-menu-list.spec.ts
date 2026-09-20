@@ -1876,4 +1876,142 @@ describe("AutofillInlineMenuList", () => {
       );
     });
   });
+
+  describe("filtering the list by the query typed into the form field", () => {
+    const filterTranslations = {
+      locale: "en",
+      fillCredentialsFor: "fillCredentialsFor",
+      username: "username",
+      view: "view",
+      newItem: "newItem",
+      newLogin: "newLogin",
+      addNewVaultItem: "addNewVaultItem",
+      noItemsToShow: "noItemsToShow",
+      noItemsMatchSearch: "noItemsMatchSearch",
+    };
+
+    const filterableCiphers = [
+      createAutofillOverlayCipherDataMock(1, {
+        name: "GitHub",
+        login: { username: "octocat", passkey: null },
+      }),
+      createAutofillOverlayCipherDataMock(2, {
+        name: "GitLab",
+        login: { username: "tanuki", passkey: null },
+      }),
+      createAutofillOverlayCipherDataMock(3, {
+        name: "José Café",
+        login: { username: "jose", passkey: null },
+      }),
+    ];
+
+    const renderedCipherNames = () =>
+      Array.from(
+        autofillInlineMenuList["inlineMenuListContainer"].querySelectorAll(".fill-cipher-button"),
+      ).map((element) => element.getAttribute("aria-label")?.replace("fillCredentialsFor ", ""));
+
+    const noResultsText = () =>
+      autofillInlineMenuList["inlineMenuListContainer"].querySelector(".no-items")?.textContent;
+
+    const filterBy = async (filterQuery: string) => {
+      postWindowMessage({
+        command: "updateAutofillInlineMenuFilterQuery",
+        filterQuery,
+        portKey,
+        token: "test-token",
+      });
+      await flushPromises();
+    };
+
+    beforeEach(async () => {
+      postWindowMessage(
+        createInitAutofillInlineMenuListMessageMock({
+          authStatus: AuthenticationStatus.Unlocked,
+          ciphers: filterableCiphers,
+          translations: filterTranslations,
+          portKey,
+          useLitComponents: false,
+        }),
+      );
+      await flushPromises();
+    });
+
+    it("renders every cipher before anything is typed", () => {
+      expect(renderedCipherNames()).toEqual(["GitHub", "GitLab", "José Café"]);
+    });
+
+    it("narrows the list to ciphers matching the name", async () => {
+      await filterBy("git");
+
+      expect(renderedCipherNames()).toEqual(["GitHub", "GitLab"]);
+    });
+
+    it("narrows the list to ciphers matching the username", async () => {
+      await filterBy("tanuki");
+
+      expect(renderedCipherNames()).toEqual(["GitLab"]);
+    });
+
+    it("ignores case and diacritics", async () => {
+      await filterBy("JOSE CAFE");
+
+      expect(renderedCipherNames()).toEqual(["José Café"]);
+    });
+
+    it("keeps the order the background produced", async () => {
+      await filterBy("git");
+
+      expect(renderedCipherNames()).toEqual(["GitHub", "GitLab"]);
+    });
+
+    it("restores the full list when the query is cleared", async () => {
+      await filterBy("git");
+      await filterBy("");
+
+      expect(renderedCipherNames()).toEqual(["GitHub", "GitLab", "José Café"]);
+    });
+
+    it("says nothing matched rather than that the vault is empty", async () => {
+      await filterBy("nothing matches this");
+
+      expect(renderedCipherNames()).toEqual([]);
+      expect(noResultsText()).toBe("noItemsMatchSearch");
+    });
+
+    it("still says the vault is empty when there were no ciphers to begin with", async () => {
+      postWindowMessage(
+        createInitAutofillInlineMenuListMessageMock({
+          authStatus: AuthenticationStatus.Unlocked,
+          ciphers: [],
+          translations: filterTranslations,
+          portKey,
+          useLitComponents: false,
+        }),
+      );
+      await flushPromises();
+
+      expect(noResultsText()).toBe("noItemsToShow");
+    });
+
+    it("resets the cipher index so arrow navigation starts at the first match", async () => {
+      autofillInlineMenuList["currentCipherIndex"] = 99;
+
+      await filterBy("git");
+
+      // Rebuilding from zero loads one page of the two matches, not a stale index.
+      expect(autofillInlineMenuList["currentCipherIndex"]).toBe(2);
+      expect(renderedCipherNames()[0]).toBe("GitHub");
+    });
+
+    it("never asks the background for more ciphers while filtering", async () => {
+      (globalThis.parent.postMessage as jest.Mock).mockClear();
+
+      await filterBy("git");
+
+      expect(globalThis.parent.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ command: "updateAutofillInlineMenuListCiphers" }),
+        expect.anything(),
+      );
+    });
+  });
 });

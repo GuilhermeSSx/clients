@@ -127,6 +127,17 @@ const nonLoginInlineCipherType: CipherType[] = [
   CipherType.SshKey,
 ];
 
+/**
+ * Local kill switch for the inline menu filter, and the only thing that needs to
+ * change to fall back to upstream behaviour: set this to false and the list
+ * closes while the user types, exactly as it does without this fork.
+ *
+ * It is a constant rather than a stored setting because reading one here would
+ * mean either a new BrowserApi storage helper or a new injected service, and
+ * this fork keeps its footprint inside the autofill overlay.
+ */
+const INLINE_MENU_FILTER_ENABLED = true;
+
 export class OverlayBackground implements OverlayBackgroundInterface {
   // Assigned as members so jest.spyOn can intercept them in tests
   private readonly openUnlockPopout = openUnlockPopout;
@@ -155,6 +166,8 @@ export class OverlayBackground implements OverlayBackgroundInterface {
   private inlineMenuButtonMessageConnectorPort: chrome.runtime.Port | null = null;
   private inlineMenuListPort: chrome.runtime.Port | null = null;
   private inlineMenuListMessageConnectorPort: chrome.runtime.Port | null = null;
+  /** Kill switch for the inline menu filter. See INLINE_MENU_FILTER_ENABLED. */
+  private inlineMenuFilterEnabled = INLINE_MENU_FILTER_ENABLED;
   private inlineMenuCiphers: Map<string, CipherView> = new Map();
   private inlineMenuFido2Credentials: Set<string> = new Set();
   private inlineMenuPageTranslations: Record<string, string> | null = null;
@@ -200,6 +213,8 @@ export class OverlayBackground implements OverlayBackgroundInterface {
     getInlineMenuSshKeysVisibility: () => this.getInlineMenuSshKeysVisibility(),
     closeAutofillInlineMenu: ({ message, sender }) =>
       void this.withSenderTab(sender, () => this.closeInlineMenu(sender, message)),
+    updateAutofillInlineMenuFilterQuery: ({ message, sender }) =>
+      void this.withSenderTab(sender, () => this.updateInlineMenuFilterQuery(message, sender)),
     checkAutofillInlineMenuFocused: ({ sender }) =>
       void this.withSenderTab(sender, () => this.checkInlineMenuFocused(sender)),
     focusAutofillInlineMenuList: () => this.focusInlineMenuList(),
@@ -1661,6 +1676,35 @@ export class OverlayBackground implements OverlayBackgroundInterface {
    * @param forceCloseInlineMenu - Identifies whether the inline menu should be forced closed
    * @param overlayElement - The overlay element to close, either the list or button
    */
+  /**
+   * Relays the text typed into the focused field to the inline menu list, so it can
+   * narrow the ciphers it was already given. This never looks up further ciphers,
+   * and the query travels one way only: into the menu frame, never back out.
+   *
+   * While the filter is switched off this reproduces the upstream behaviour of
+   * closing the list as soon as the user types.
+   *
+   * @param message - The message carrying the typed text.
+   * @param sender - The sender of the message.
+   */
+  private updateInlineMenuFilterQuery(
+    message: OverlayBackgroundExtensionMessage,
+    sender: chrome.runtime.MessageSender,
+  ) {
+    if (!this.inlineMenuFilterEnabled) {
+      this.closeInlineMenu(sender, {
+        overlayElement: AutofillOverlayElement.List,
+        forceCloseInlineMenu: true,
+      });
+      return;
+    }
+
+    this.postMessageToPort(this.inlineMenuListPort, {
+      command: "updateAutofillInlineMenuFilterQuery",
+      filterQuery: typeof message.filterQuery === "string" ? message.filterQuery : "",
+    });
+  }
+
   private closeInlineMenu(
     sender: chrome.runtime.MessageSender,
     { forceCloseInlineMenu, overlayElement }: CloseInlineMenuMessage = {},

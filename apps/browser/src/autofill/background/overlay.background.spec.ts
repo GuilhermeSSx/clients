@@ -2916,6 +2916,60 @@ describe("OverlayBackground", () => {
       });
     });
 
+    describe("updateAutofillInlineMenuFilterQuery message handler", () => {
+      const filterCommand = "updateAutofillInlineMenuFilterQuery";
+      const sender = mock<chrome.runtime.MessageSender>({ tab: { id: 1 } });
+
+      beforeEach(async () => {
+        await initOverlayElementPorts({ initList: true, initButton: false });
+      });
+
+      it("relays the typed query to the inline menu list port", async () => {
+        sendMockExtensionMessage({ command: filterCommand, filterQuery: "git" }, sender);
+        await flushPromises();
+
+        expect(listPortSpy.postMessage).toHaveBeenCalledWith({
+          command: filterCommand,
+          filterQuery: "git",
+        });
+      });
+
+      it("treats an absent query as an empty one rather than forwarding undefined", async () => {
+        sendMockExtensionMessage({ command: filterCommand }, sender);
+        await flushPromises();
+
+        expect(listPortSpy.postMessage).toHaveBeenCalledWith({
+          command: filterCommand,
+          filterQuery: "",
+        });
+      });
+
+      it("never requests further ciphers in response to a query", async () => {
+        const updateOverlayCiphersSpy = jest.spyOn(overlayBackground, "updateOverlayCiphers");
+
+        sendMockExtensionMessage({ command: filterCommand, filterQuery: "git" }, sender);
+        await flushPromises();
+
+        expect(updateOverlayCiphersSpy).not.toHaveBeenCalled();
+      });
+
+      it("falls back to closing the list when the local kill switch is off", async () => {
+        overlayBackground["inlineMenuFilterEnabled"] = false;
+
+        sendMockExtensionMessage({ command: filterCommand, filterQuery: "git" }, sender);
+        await flushPromises();
+
+        expect(listPortSpy.postMessage).not.toHaveBeenCalledWith(
+          expect.objectContaining({ command: filterCommand }),
+        );
+        expect(tabsSendMessageSpy).toHaveBeenCalledWith(
+          sender.tab,
+          expect.objectContaining({ command: "closeAutofillInlineMenu" }),
+          expect.anything(),
+        );
+      });
+    });
+
     describe("getAutofillInlineMenuPosition", () => {
       it("returns the current inline menu positio", async () => {
         const inlineMenuPosition: InlineMenuPosition = mock<InlineMenuPosition>();
