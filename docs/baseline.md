@@ -69,34 +69,55 @@ git switch -c base/upstream browser-v2026.9.0
 # 3. dependências — npm ci sempre, npm install nunca
 npm ci
 
-# 4. build de desenvolvimento para Chrome
+# 4. build de desenvolvimento para Chrome, com a chave que fixa o ID da extensão
+#    Um comando só. Ver "A pegadinha que custou uma sessão" logo abaixo antes de
+#    considerar separar isso em dois passos.
 cd apps/browser
-npm run build:chrome
-
-# 5. chave de desenvolvimento (fixa o ID da extensão)
-#    NÃO usar `npm run build:dev:chrome` no Windows — ver "Pegadinha do Windows"
-bash ./scripts/update-manifest-dev.sh
+npm_config_script_shell="C:\\Program Files\\Git\\bin\\bash.exe" npm run build:dev:chrome
 ```
 
-### Pegadinha do Windows
+### A pegadinha que custou uma sessão
 
-`npm run` no Windows executa scripts com `cmd.exe`, que não roda `.sh`. O script
-`update:dev:chrome` (e o `update:beta:chrome`) é um shell script, então
-`npm run build:dev:chrome` **falha no Windows**.
+Duas armadilhas se combinam no Windows.
 
-Duas saídas, ambas equivalentes:
+A primeira: `npm run` usa `cmd.exe`, que não executa `.sh`. Como `update:dev:chrome` é um
+shell script, `npm run build:dev:chrome` falha a menos que o shell seja informado.
+
+A segunda, pior: contornar a primeira rodando `npm run build:chrome` e depois
+`bash ./scripts/update-manifest-dev.sh` funciona **uma vez**. Todo `build:chrome`
+posterior regenera `build/manifest.json` a partir do código-fonte e apaga a chave de
+desenvolvimento. Se o script não for reexecutado, o build fica sem chave.
+
+Sem a chave, o Chrome deriva outro ID para a extensão. ID diferente é extensão diferente:
+todo o storage some. Login perdido, cofre re-sincronizado, e todas as configurações de
+volta ao default — incluindo `inlineMenuVisibility`, cujo default é `Off`
+(`libs/common/src/autofill/services/autofill-settings.service.ts`). O sintoma é o inline
+menu parar de aparecer sem erro nenhum no console, o que manda o diagnóstico para o lado
+errado.
+
+Aconteceu em 2026-09-20: três builds seguidos sem reaplicar a chave, o ID mudou de
+`mfpkfneejkegaphnaebeojnkkimbaodk` para `acklnbnimhjndpeicokcijniiaedkggb`, e o menu
+sumiu.
+
+**Use sempre o comando único**, verificado nesta máquina:
 
 ```bash
-# A) build e chave em dois passos (o que foi usado aqui)
-npm run build:chrome
-bash ./scripts/update-manifest-dev.sh
-
-# B) forçar o shell do npm só nessa invocação, sem alterar nenhum arquivo do repo
+cd apps/browser
 npm_config_script_shell="C:\Program Files\Git\bin\bash.exe" npm run build:dev:chrome
 ```
 
-O `update-manifest-dev.sh` só escreve em `apps/browser/build/manifest.json` — a **saída**
-do build. O manifest fonte não é tocado, então a regra 6 continua valendo.
+A variável vale só para aquela invocação; nenhum arquivo do repositório é alterado. O
+`update-manifest-dev.sh` escreve apenas em `apps/browser/build/manifest.json`, que é saída
+de build, então a regra 6 continua valendo.
+
+Confirme o ID depois de todo build:
+
+```bash
+node -e 'const c=require("crypto"),fs=require("fs");const m=JSON.parse(fs.readFileSync("build/manifest.json","utf8"));const h=c.createHash("sha256").update(Buffer.from(m.key,"base64")).digest("hex").slice(0,32);console.log([...h].map(x=>String.fromCharCode(97+parseInt(x,16))).join(""))'
+```
+
+Deve imprimir `mfpkfneejkegaphnaebeojnkkimbaodk`. Qualquer outra coisa significa build sem
+chave, e recarregar assim vai zerar o perfil da extensão de novo.
 
 ### Memória
 

@@ -101,7 +101,32 @@ Sem números de linha de propósito: eles mudam a cada rebase. Procure pelos sí
 ## Toolchain nesta máquina
 
 - Node gerenciado por `fnm`; o `.nvmrc` ativa o v24 ao entrar na pasta.
-- `jq` é necessário para `npm run build:dev:chrome` (script `update-manifest-dev.sh`).
-- No Windows, `npm run` usa `cmd.exe` e não executa `.sh`. Os scripts `update:dev:chrome` e
-  `update:beta:chrome` precisam do Git Bash, ou de `npm_config_script_shell` apontando para
-  o `bash.exe`. Detalhes em `docs/baseline.md`.
+- `jq` é necessário para o script `update-manifest-dev.sh`.
+
+### Sempre use o comando único de build
+
+```bash
+cd apps/browser
+npm_config_script_shell="C:\Program Files\Git\bin\bash.exe" npm run build:dev:chrome
+```
+
+**Nunca rode `npm run build:chrome` sozinho.** Ele regenera `build/manifest.json` do
+código-fonte e, ao fazer isso, apaga a chave de desenvolvimento que o
+`update-manifest-dev.sh` injetou no build anterior.
+
+Sem essa chave o Chrome deriva o ID da extensão de outra forma. ID diferente significa
+extensão diferente para o Chrome: **todo o storage some**. Na prática, login perdido,
+cofre re-sincronizado do zero e — o mais traiçoeiro — todas as configurações de volta ao
+default, inclusive `inlineMenuVisibility`, cujo default é `Off`. O sintoma é o inline menu
+simplesmente parar de aparecer, sem nenhum erro no console.
+
+O `npm_config_script_shell` existe porque no Windows o `npm run` usa `cmd.exe`, que não
+executa `.sh`, e `update:dev:chrome` é um shell script. A variável vale só para aquela
+invocação; nenhum arquivo do repositório é alterado.
+
+ID esperado com a chave aplicada: `mfpkfneejkegaphnaebeojnkkimbaodk`. Conferir depois de
+todo build:
+
+```bash
+node -e 'const c=require("crypto"),fs=require("fs");const m=JSON.parse(fs.readFileSync("build/manifest.json","utf8"));const h=c.createHash("sha256").update(Buffer.from(m.key,"base64")).digest("hex").slice(0,32);console.log([...h].map(x=>String.fromCharCode(97+parseInt(x,16))).join(""))'
+```
