@@ -1,0 +1,84 @@
+name: fork-build-browser
+
+# Gera o mesmo pacote da extensão Chrome a partir do mesmo commit.
+# Não publica nada. Só constrói, verifica a superfície do fork e sobe o artefato.
+
+on:
+  push:
+    branches:
+      - base/upstream
+      - "feat/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Chrome (dev)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        # actions/checkout v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        # actions/setup-node v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Print toolchain
+        run: |
+          node --version
+          npm --version
+          jq --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Assert lockfile untouched
+        run: |
+          if [ -n "$(git status --porcelain package-lock.json)" ]; then
+            echo "::error::package-lock.json foi modificado por npm ci"
+            git --no-pager diff --stat package-lock.json
+            exit 1
+          fi
+          echo "package-lock.json intacto"
+
+      - name: Build Chrome extension
+        working-directory: apps/browser
+        run: npm run build:dev:chrome
+
+      - name: Assert build output
+        run: |
+          test -f apps/browser/build/manifest.json
+          echo "--- manifest.json ---"
+          jq '{manifest_version, name, version, permissions, host_permissions}' apps/browser/build/manifest.json
+
+      - name: Package hash
+        id: hash
+        working-directory: apps/browser/build
+        run: |
+          find . -type f -print0 | sort -z | xargs -0 sha256sum > ../build-files.sha256
+          sha256sum ../build-files.sha256 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload extension
+        # actions/upload-artifact v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: chrome-dev-${{ github.sha }}
+          path: |
+            apps/browser/build
+            apps/browser/build-files.sha256
+          if-no-files-found: error
+          retention-days: 14
