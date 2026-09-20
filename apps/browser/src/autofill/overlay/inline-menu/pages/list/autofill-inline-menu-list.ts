@@ -40,6 +40,8 @@ import {
 } from "../../abstractions/autofill-inline-menu-list";
 import { AutofillInlineMenuPageElement } from "../shared/autofill-inline-menu-page-element";
 
+import { filterInlineMenuCiphers } from "./filter-inline-menu-ciphers";
+
 export class AutofillInlineMenuList extends AutofillInlineMenuPageElement {
   /** Non-null asserted. Set in initAutofillInlineMenuList before any read. */
   private inlineMenuListContainer!: HTMLDivElement;
@@ -48,6 +50,13 @@ export class AutofillInlineMenuList extends AutofillInlineMenuPageElement {
   private resizeObserver: ResizeObserver;
   private eventHandlersMemo: { [key: string]: EventListener } = {};
   private ciphers: InlineMenuCipherData[] = [];
+  /**
+   * Every cipher the background sent for the focused field, before the typed
+   * query narrows it. Kept so re-filtering never needs to ask for more ciphers.
+   */
+  private availableCiphers: InlineMenuCipherData[] = [];
+  /** The text currently typed into the focused form field, if any. */
+  private filterQuery = "";
   /** Non-null asserted. Set in buildInlineMenuList before any read. */
   private ciphersList!: HTMLUListElement;
   private cipherListScrollIsDebounced = false;
@@ -658,13 +667,44 @@ export class AutofillInlineMenuList extends AutofillInlineMenuPageElement {
       return;
     }
 
-    this.ciphers = this.getFilteredCiphersForTotpField(ciphers);
-    this.currentCipherIndex = 0;
+    this.availableCiphers = this.getFilteredCiphersForTotpField(ciphers);
     this.showInlineMenuAccountCreation = showInlineMenuAccountCreation;
+    this.renderCiphersForFilterQuery();
+  }
+
+  /**
+   * Updates the query used to narrow the cipher list, then re-renders. The query
+   * only ever narrows the ciphers the background has already sent; no additional
+   * ciphers are requested and nothing leaves this frame.
+   *
+   * @param filterQuery - The text currently typed into the focused form field.
+   */
+  private updateFilterQuery(filterQuery = "") {
+    if (filterQuery === this.filterQuery) {
+      return;
+    }
+
+    this.filterQuery = filterQuery;
+
+    if (this.isPasskeyAuthInProgress || !this.inlineMenuListContainer) {
+      return;
+    }
+
+    this.renderCiphersForFilterQuery();
+  }
+
+  /**
+   * Renders the ciphers matching the current query. The list is rebuilt from the
+   * top so that arrow key navigation starts at the first match, and the ciphers
+   * keep the order the background produced.
+   */
+  private renderCiphersForFilterQuery() {
+    this.ciphers = filterInlineMenuCiphers(this.availableCiphers, this.filterQuery);
+    this.currentCipherIndex = 0;
     this.resetInlineMenuContainer();
 
     if (!this.ciphers?.length) {
-      this.buildNoResultsInlineMenuList();
+      this.buildNoResultsInlineMenuList(!!this.filterQuery && !!this.availableCiphers?.length);
       return;
     }
 
@@ -829,11 +869,16 @@ export class AutofillInlineMenuList extends AutofillInlineMenuPageElement {
   /**
    * Inline menu view that is presented when no ciphers are found for a given page.
    * Facilitates the ability to add a new vault item from the inline menu.
+   *
+   * @param filteredOutByQuery - Whether ciphers exist for this field but none match
+   * what the user typed, which warrants a different message than an empty list.
    */
-  private buildNoResultsInlineMenuList() {
+  private buildNoResultsInlineMenuList(filteredOutByQuery = false) {
     const noItemsMessage = globalThis.document.createElement("div");
     noItemsMessage.classList.add("no-items", "inline-menu-list-message");
-    noItemsMessage.textContent = this.getTranslation("noItemsToShow");
+    noItemsMessage.textContent = this.getTranslation(
+      filteredOutByQuery ? "noItemsMatchSearch" : "noItemsToShow",
+    );
 
     const newItemButton = this.buildNewItemButton();
 

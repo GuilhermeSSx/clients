@@ -2670,6 +2670,7 @@ export class OverlayBackground implements OverlayBackgroundInterface {
         "newIdentity",
         "newItem",
         "newLogin",
+        "noItemsMatchSearch",
         "noItemsToShow",
         "opensInANewWindow",
         "passkeys",
