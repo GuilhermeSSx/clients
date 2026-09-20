@@ -65,11 +65,30 @@ Rodar a cada rebuild, antes de voltar a usar no dia a dia.
 - [ ] SPA que troca de rota sem recarregar
 - [ ] Travar o cofre com o menu aberto: a lista some na hora
 
+## Onde anotar
+
+O log pode ser editado direto pelo GitHub, pelo lápis na página do arquivo. É o caminho
+mais prático quando se está em outra máquina e só se quer registrar uma linha.
+
+O preço disso aparece no rebase. `base/upstream` é uma branch **reescrita** todo mês:
+rebasear troca os commits por versões novas dos mesmos commits. Duas consequências:
+
+- Antes de rebasear, é preciso trazer o que foi editado pelo site, senão o trabalho fica
+  só lá e o rebase parte de uma base velha.
+- Depois de rebasear, o `git push` comum é **recusado**. O GitHub vê um histórico que não
+  é continuação do que ele tem, e recusa por segurança. Isso é esperado, não é erro.
+
+A saída é `--force-with-lease`, que sobrescreve só se ninguém tiver empurrado nada desde
+o último `fetch`. Nunca usar `--force` puro, que sobrescreve mesmo por cima de trabalho
+que ainda não se viu.
+
 ## Rotina de rebase
 
 ```bash
+git pull --rebase origin base/upstream
 git fetch upstream --tags
 git rebase browser-v<nova-tag>
+
 npm ci
 cd apps/browser
 npm_config_script_shell="C:\Program Files\Git\bin\bash.exe" npm run build:dev:chrome
@@ -77,5 +96,15 @@ cd ../..
 npx jest apps/browser/src/autofill
 ```
 
-Conferir o ID depois do build. Detalhes e a pegadinha da chave de desenvolvimento estão
-em `docs/baseline.md`.
+Conferir o ID depois do build. Detalhes e a pegadinha da chave de desenvolvimento estão em
+`docs/baseline.md`.
+
+Só depois de o build sair limpo e a regressão passar:
+
+```bash
+git push --force-with-lease origin base/upstream
+```
+
+Se o push for recusado mesmo com `--force-with-lease`, é sinal de que existe algo no
+GitHub que não foi trazido. Rodar `git pull --rebase origin base/upstream` e repetir — não
+insistir com `--force`.
