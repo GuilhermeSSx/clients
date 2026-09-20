@@ -198,6 +198,65 @@ Os workflows do upstream que disparam em `push` estão todos travados nas branch
 nenhum deles — só o `fork-build-browser.yml`. Abrir um pull request _dentro_ do fork, por
 outro lado, dispara os workflows de `pull_request` do upstream.
 
+## Biometria: o ID do fork precisa ser autorizado à mão
+
+O desbloqueio por Windows Hello não acontece dentro da extensão. A extensão conversa com o
+app desktop do Bitwarden por native messaging, e o Chrome só permite essa conversa para os
+IDs listados num manifesto que o **app desktop** escreve.
+
+Essa lista é fixa no código do upstream, em
+`apps/desktop/src/main/native-messaging.main.ts`, em `loadChromeIds()`:
+
+```
+chrome-extension://nngceckbapebfimnlniiiahkandclblb/   Chrome oficial
+chrome-extension://hccnnhgbibccigepcmlgppchkpfdophk/   Chrome beta
+chrome-extension://jbkfoedolllekgbhcbcoahefnbanhhlh/   Edge
+chrome-extension://ccnckbpmaceehanjmeomladnmlffdjgn/   Opera
+```
+
+Há um ramo que varre os perfis do Chrome atrás de IDs de desenvolvimento, mas ele só roda
+sob `isDev()`, ou seja, apenas quando o **app desktop** é build de desenvolvimento. Com o
+desktop oficial instalado, valem só os quatro acima.
+
+O ID deste fork não está na lista, então o Chrome recusa a conexão antes de qualquer
+tentativa e a biometria simplesmente não funciona — sem erro visível na extensão.
+
+### Correção aplicada nesta máquina
+
+Arquivo: `C:\Users\ususario\AppData\Roaming\Bitwarden\browsers\chrome.json`
+Apontado pela chave `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.8bit.bitwarden`.
+
+```bash
+jq '.allowed_origins += ["chrome-extension://mfpkfneejkegaphnaebeojnkkimbaodk/"]' \
+  chrome.json > chrome.json.tmp && mv chrome.json.tmp chrome.json
+```
+
+Backup do original em `chrome.json.bak-antes-do-fork`. Depois disso, fechar o Chrome
+inteiro e reabrir.
+
+O `desktop_proxy.exe` não mantém lista própria — essa verificação só existe uma vez, na
+escrita do manifesto. Editar o arquivo basta.
+
+### Isso se perde
+
+O app desktop reescreve `chrome.json` toda vez que a integração com o navegador é ligada
+ou desligada, e provavelmente ao atualizar o app. **Não alterne aquele botão**: ligar e
+desligar "só para conferir" apaga o ID e quebra a biometria de novo. Se quebrar, reaplique
+o comando acima.
+
+### O que isso significa
+
+Aquela lista é a fronteira que decide quais extensões podem pedir ao app desktop para
+destravar o cofre. Acrescentar um ID concede esse direito à extensão correspondente. Aqui
+é uma build gerada localmente a partir de código revisado, e a decisão foi consciente.
+
+### Impacto na trilha corporativa
+
+Cada máquina da equipe teria o mesmo bloqueio. As saídas são empurrar um `chrome.json`
+ajustado por GPO ou script de logon, forkar também o app desktop, ou abrir mão de
+biometria. Nem o plano original nem a Fase 4 dimensionavam isso; entra na conta antes de
+decidir pela distribuição interna.
+
 ## Validação manual — resultado
 
 Executada em 2026-09-20 no Chrome do usuário, perfil próprio, contra o Vaultwarden

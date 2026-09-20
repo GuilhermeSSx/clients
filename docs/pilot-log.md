@@ -47,6 +47,7 @@ Legenda das colunas:
 Rodar a cada rebuild, antes de voltar a usar no dia a dia.
 
 - [ ] Extensão carrega e o ID continua `mfpkfneejkegaphnaebeojnkkimbaodk`
+- [ ] Biometria destrava (se falhar, conferir `allowed_origins` em `chrome.json` — ver `baseline.md`)
 - [ ] Login e desbloqueio
 - [ ] Sync completo
 - [ ] Inline menu aparece ao focar campo de login
