@@ -219,9 +219,22 @@ self-hosted. Extensão carregada sem compactação a partir de `apps/browser/bui
 ### Erros observados e o que são
 
 - `Uncaught (in promise) Error: Could not establish connection. Receiving end does not exist.`
-  — o background fala com abas que ainda não receberam o content script. O Chrome não
-  injeta content script em aba já aberta no momento do load unpacked; some depois do
-  reload da aba. Comportamento do upstream.
+  — **já diagnosticado, não re-investigar.** A origem é
+  `broadcastTargetingRulesCacheInvalidation` em
+  `apps/browser/src/autofill/background/overlay.background.ts`, introduzida pelo upstream
+  no commit `bc9e7a2887` (PM-38617). Ela varre todas as abas e faz
+  `void BrowserApi.tabSendMessage(tab, { command: "clearTargetingRulesCache" })`.
+
+  O comentário da própria função afirma que abas sem content script vão "silently no-op",
+  mas `void` apenas descarta o valor da promise: a rejeição continua sem tratamento e o
+  Chrome registra. Toda aba sem content script — `chrome://`, abas abertas antes do load
+  unpacked — produz uma entrada.
+
+  É cosmético e não quebra nada. Decisão de 2026-09-20: **não corrigir no fork.** Um
+  `.catch()` resolveria em uma linha, mas é diff que não pertence ao filtro e vira mais um
+  ponto de conflito no rebase mensal. O fork precisa ser entediante. Se algum dia incomodar
+  de verdade, o caminho é um PR isolado para o upstream, não um patch local.
+
 - `Unable to fetch ServerConfig from https://localhost:8080/api` — resíduo da primeira
   configuração, antes de apontar para o servidor real. A página de Erros do Chrome é
   cumulativa e não limpa sozinha.
