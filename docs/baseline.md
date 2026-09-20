@@ -177,17 +177,60 @@ Os workflows do upstream que disparam em `push` estão todos travados nas branch
 nenhum deles — só o `fork-build-browser.yml`. Abrir um pull request _dentro_ do fork, por
 outro lado, dispara os workflows de `pull_request` do upstream.
 
+## Validação manual — resultado
+
+Executada em 2026-09-20 no Chrome do usuário, perfil próprio, contra o Vaultwarden
+self-hosted. Extensão carregada sem compactação a partir de `apps/browser/build`.
+
+| Item                        | Resultado                                                                     |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| Extensão carrega            | OK — ID `mfpkfneejkegaphnaebeojnkkimbaodk`, igual ao derivado da chave de dev |
+| URL do servidor self-hosted | OK                                                                            |
+| Login                       | OK                                                                            |
+| Desbloqueio                 | OK                                                                            |
+| Sync completo               | OK — SignalR conecta, cifras descriptografam                                  |
+| Inline menu aparece         | OK                                                                            |
+| Lista de cifras renderiza   | OK — vários logins do mesmo domínio listados                                  |
+| Autofill preenche           | pendente                                                                      |
+| TOTP                        | pendente                                                                      |
+| Salvar login novo           | pendente                                                                      |
+
+### Erros observados e o que são
+
+- `Uncaught (in promise) Error: Could not establish connection. Receiving end does not exist.`
+  — o background fala com abas que ainda não receberam o content script. O Chrome não
+  injeta content script em aba já aberta no momento do load unpacked; some depois do
+  reload da aba. Comportamento do upstream.
+- `Unable to fetch ServerConfig from https://localhost:8080/api` — resíduo da primeira
+  configuração, antes de apontar para o servidor real. A página de Erros do Chrome é
+  cumulativa e não limpa sozinha.
+- `KeyIdBackfillError: API call failed during user key id backfill` (HTTP 404) — o
+  Vaultwarden não implementa o endpoint que o cliente oficial chama. Lacuna de paridade
+  de API do servidor, não defeito do fork; ocorreria igual com a extensão da Web Store.
+  Cai em criptografia, então pela regra 8 não é tocado.
+- `Lit is in dev mode` e `allowSignalWrites is deprecated` — esperados num build de
+  desenvolvimento do upstream.
+
+### Linha de base de UX, para comparar depois do patch
+
+`autofill-inline-menu-list.ts` define `showCiphersPerPage = 6`, com carregamento
+incremental conforme o scroll. Na prática, cerca de **3 itens ficam visíveis** antes de
+precisar rolar. Com dezenas de logins no mesmo domínio, escolher exige rolagem — que é
+exatamente o problema que o filtro da Fase 2 ataca.
+
+### Página de teste local
+
+`scratchpad/login-test.html` servida em `http://localhost:8787` por um servidor Node de
+oito linhas, sem dependências. Formulário de login simples, campos com
+`autocomplete="username"` e `autocomplete="current-password"`. Útil para exercitar o
+inline menu sem depender de site externo. Ainda fora do repositório: entra na Fase 3,
+junto com a variante hostil.
+
+### Observação sobre automação
+
+O inline menu se esconde quando o documento perde o foco. Dirigir a página por automação
+cria os elementos no DOM — dá para confirmar via `MutationObserver` que o botão e a lista
+nascem em ~38 ms após o foco — mas a renderização visual só acontece com a janela em foco
+real. Verificação visual do menu é sempre manual.
+
 ## Checklist de validação manual
-
-Só o usuário consegue executar. Perfil separado do Chrome, apontando para o Vaultwarden
-self-hosted (a URL é configurada na UI da extensão, nunca no código).
-
-- [ ] Extensão carrega sem erro no console do service worker
-- [ ] Configurar a URL do servidor self-hosted
-- [ ] Login
-- [ ] Desbloqueio
-- [ ] Sync completo do cofre
-- [ ] Inline menu aparece em campo de login
-- [ ] Autofill preenche usuário e senha
-- [ ] TOTP
-- [ ] Salvar login novo
