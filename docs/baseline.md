@@ -140,12 +140,21 @@ pressão.
 
 ### Pasta a carregar no Chrome
 
+A pasta `build` dentro do app do navegador, no clone do fork:
+
 ```
-C:\Users\ususario\projetos\clients\apps\browser\build
+<pasta-do-fork>\apps\browser\build
 ```
 
 `chrome://extensions` → ativar **Modo do desenvolvedor** → **Carregar sem compactação** →
 apontar para a pasta acima.
+
+Ela não está versionada (`.gitignore`), então clonar o repositório não a traz. Ou se
+compila localmente, ou se baixa o artefato `chrome-dev-<sha>` da aba Actions, que é gerado
+pelo mesmo workflow e já sai com a chave de desenvolvimento aplicada.
+
+O Chrome lê os arquivos dessa pasta continuamente. Mover, renomear ou apagar o clone
+desativa a extensão.
 
 ### Identidade da extensão
 
@@ -221,18 +230,35 @@ desktop oficial instalado, valem só os quatro acima.
 O ID deste fork não está na lista, então o Chrome recusa a conexão antes de qualquer
 tentativa e a biometria simplesmente não funciona — sem erro visível na extensão.
 
-### Correção aplicada nesta máquina
+### Correção, a repetir em cada máquina
 
-Arquivo: `C:\Users\ususario\AppData\Roaming\Bitwarden\browsers\chrome.json`
-Apontado pela chave `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.8bit.bitwarden`.
+Arquivo, colável direto na barra do Explorador:
 
-```bash
-jq '.allowed_origins += ["chrome-extension://mfpkfneejkegaphnaebeojnkkimbaodk/"]' \
-  chrome.json > chrome.json.tmp && mv chrome.json.tmp chrome.json
+```
+%APPDATA%\Bitwarden\browsers\chrome.json
 ```
 
-Backup do original em `chrome.json.bak-antes-do-fork`. Depois disso, fechar o Chrome
-inteiro e reabrir.
+Quem aponta para ele é a chave de registro
+`HKCU\Software\Google\Chrome\NativeMessagingHosts\com.8bit.bitwarden`, que o app desktop
+cria. Para conferir o caminho resolvido numa máquina:
+
+```powershell
+(Get-ItemProperty 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.8bit.bitwarden').'(default)'
+```
+
+Acrescentar o ID do fork à lista, preservando os quatro oficiais. Faz backup antes e
+exige `jq` no PATH:
+
+```bash
+cd "$APPDATA/Bitwarden/browsers"
+cp chrome.json chrome.json.bak-antes-do-fork
+jq '.allowed_origins += ["chrome-extension://mfpkfneejkegaphnaebeojnkkimbaodk/"]' \
+  chrome.json > chrome.json.tmp && mv chrome.json.tmp chrome.json
+jq -r '.allowed_origins[]' chrome.json
+```
+
+A última linha deve imprimir cinco entradas, a última sendo a do fork. Em seguida, fechar
+o Chrome inteiro — todas as janelas — e reabrir.
 
 O `desktop_proxy.exe` não mantém lista própria — essa verificação só existe uma vez, na
 escrita do manifesto. Editar o arquivo basta.
