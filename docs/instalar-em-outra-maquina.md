@@ -6,6 +6,27 @@ desbloqueio por biometria.
 Escrito para uso pessoal, com carregamento sem compactação. Distribuição corporativa por
 política do Chrome é outra história, e está fora deste documento.
 
+## A ordem, em uma tela
+
+Clonar e rodar o instalador **não basta**. O clone traz o código-fonte; a pasta `build`,
+que é o que o Chrome carrega, não é versionada. E o instalador cuida só da biometria.
+
+| #   | Passo                                        | Como    |
+| --- | -------------------------------------------- | ------- |
+| 1   | Obter a extensão: compilar ou baixar         | comando |
+| 2   | Clonar o repositório                         | comando |
+| 3   | Carregar sem compactação no Chrome           | manual  |
+| 4   | Conferir o ID da extensão                    | manual  |
+| 5   | URL do servidor, login, ligar o menu inline  | manual  |
+| 6   | App desktop do Bitwarden + integração ligada | manual  |
+| 7   | Instalar o vigia da biometria                | comando |
+| 8   | Fechar o Chrome por completo e reabrir       | manual  |
+
+Os passos 6 a 8 só valem para quem usa biometria. O filtro funciona sem eles.
+
+O passo 5 é o que mais engana: a sugestão de preenchimento vem **desligada** de fábrica, e
+o sintoma é o menu não aparecer, sem erro nenhum em lugar nenhum.
+
 ## Antes de começar
 
 | Precisa                    | Por quê                                               |
@@ -100,6 +121,9 @@ Com o app desktop do Bitwarden instalado e a integração com o navegador ligada
 cd <pasta-do-clone>
 pwsh -File tools\windows\instalar-vigia-biometria.ps1
 ```
+
+Sem o PowerShell 7 na máquina, troque `pwsh` por `powershell`. O instalador foi testado nas
+duas versões e escolhe sozinho o interpretador para o vigia.
 
 Saída esperada:
 
