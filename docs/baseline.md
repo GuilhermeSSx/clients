@@ -280,56 +280,65 @@ try {
 Ou seja, todo boot, toda abertura do app e toda atualização regravam o arquivo com apenas
 os quatro IDs das lojas. A edição manual dura uma sessão.
 
-### Mantendo a correção entre reinícios
+### Mantendo a correção: vigia do arquivo
 
-`~\bin\bitwarden-fork-biometria.ps1`, disparado no logon pela tarefa agendada
-**"Bitwarden fork - biometria"**. `bitwarden-fork-biometria.cmd` ao lado serve só para
-execução avulsa.
+`~\bin\bitwarden-fork-biometria.ps1`, iniciado no logon pela tarefa agendada
+**"Bitwarden fork - biometria"**. O `.cmd` ao lado só religa a tarefa, caso o vigia tenha
+sido encerrado.
 
-Ele não aplica uma vez e sai, porque perderia a corrida: no logon o script e o app sobem
-juntos, o script é rápido, o app é Electron e demora — aplicar de imediato seria
-sobrescrito segundos depois.
+Ele **vigia o arquivo, não o processo do app**. Um `FileSystemWatcher` sobre
+`chrome.json` reage à regravação em si, que é onde o dano acontece. Isso cobre logon,
+reinício do app no meio do dia e atualização, sem precisar adivinhar quando o app sobe.
 
-Também não fica preso a um tempo fixo. Espera o processo `Bitwarden` aparecer, cobre os 45
-segundos seguintes reaplicando a cada 3 s, confirma e encerra. Se o app não aparecer em 5
-minutos, aplica assim mesmo e sai. É idempotente: se o ID já está lá, não faz nada.
+Medido: o ID removido à mão volta em **cerca de 500 ms**.
+
+Uma varredura lenta a cada 60 s serve de rede de segurança, para o caso de um evento se
+perder ou de o arquivo ainda não existir quando o vigia começa.
+
+Reaplicar é idempotente. A própria escrita dispara mais um evento, que encontra o ID
+presente e não faz nada — sem laço.
 
 Grava em UTF-8 sem BOM via `File.WriteAllText` com `UTF8Encoding($false)`, e não por
-`Set-Content -Encoding utf8`, que no PowerShell 5.1 escreveria BOM e quebraria a leitura
-do arquivo pelo Chrome.
+`Set-Content -Encoding utf8`, que no PowerShell 5.1 escreveria BOM e quebraria a leitura do
+arquivo pelo Chrome.
 
-Cada volta do laço é isolada. Sem isso o script morre: com `$ErrorActionPreference = "Stop"`
-uma leitura que falhe por disputa de arquivo encerra tudo — e essa disputa acontece
-exatamente quando o app está gravando, que é o instante em que a correção mais precisa
-sobreviver. A primeira versão caiu em menos de um minuto por causa disso, sem registrar
-encerramento no log.
+Registra em `%APPDATA%\Bitwarden\browsers\fork-biometria.log`.
 
-Registra o resultado em `%APPDATA%\Bitwarden\browsers\fork-biometria.log`, uma linha por
-execução.
+### Duas tentativas que não funcionaram, e por quê
 
-### Por que tarefa agendada e não atalho na inicialização
+**Atalho na pasta `Startup`.** Não esconde console, qualquer que seja o "window style" do
+atalho. E emparelhado com um laço de tempo fixo, deixava um console preto em primeiro plano
+por seis minutos após cada logon.
 
-A primeira tentativa foi um atalho em `Startup` com janela minimizada. Não funciona: a
-janela do console aparece em primeiro plano assim mesmo, e com um laço de seis minutos ela
-ficava ocupando a tela o tempo todo.
+**Tarefa agendada com `-WindowStyle Hidden`.** Também não esconde. No Windows 11 o host de
+console padrão é o Windows Terminal, e ele ignora esse parâmetro — quem o entende é o
+`conhost`. A janela continuava aparecendo.
 
-`New-ScheduledTaskSettingsSet -Hidden` mais `-WindowStyle Hidden` resolvem de verdade.
-A tarefa roda como o usuário, sem elevação (`RunLevel Limited`), e termina sozinha.
+**O que funciona:** lançar por `conhost.exe --headless`, que cria o console sem janela e
+sem passar pelo Windows Terminal. A ação da tarefa é:
 
-Verificado por execução: o ID foi removido à mão, a tarefa foi disparada, o ID voltou em 6
-segundos, **zero processos com janela visível**, a tarefa terminou com resultado `0` e o
-log registrou `fim em 45s | app visto | reaplicacoes: 1 | ID presente: True`. Nenhum
-processo ficou pendurado. O arquivo permanece sem BOM e com `name`, `type` e `path`
-intactos.
+```
+conhost.exe --headless "<caminho do pwsh>" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "<caminho do script>"
+```
 
-**O que ainda não cobre:** se o app desktop reiniciar no meio do dia — atualização, queda,
-reinício manual — a tarefa já terminou e a biometria quebra até o próximo logon. Nesse
-caso, clique duplo no `.cmd`.
+`LogonType S4U` seria ainda mais limpo, por rodar sem desktop nenhum, mas registrar uma
+tarefa S4U exige privilégio administrativo — `Register-ScheduledTask` devolve "Acesso
+negado" sem elevação.
 
-**Alternativa sem nada disso:** o desbloqueio por PIN passa por `PinServiceAbstraction`,
-dentro da própria extensão, e não toca em native messaging. Não quebra em boot nem em
-atualização, e não precisa de script. Foi descartado aqui por preferência pelo Windows
-Hello, não por limitação técnica.
+Configurações relevantes da tarefa: `Hidden`, `ExecutionTimeLimit` zero, porque o vigia é
+residente, `MultipleInstances IgnoreNew`, para religar sem duplicar, e reinício automático
+até três vezes em caso de falha.
+
+Verificado por execução: zero processos com janela visível, vigia vivo, a tarefa em
+`Running`, o ID removido à mão restaurado em 626 ms, e o `.cmd` religando sem criar
+segunda instância.
+
+### O custo
+
+O vigia é um processo residente de **cerca de 96 MB**, porque é o PowerShell 7. Em troca,
+a biometria deixa de quebrar em qualquer cenário. Se esse consumo incomodar, o script roda
+igual no Windows PowerShell 5.1, que é mais leve — a escrita sem BOM já está tratada para
+os dois.
 
 ### O que isso significa
 
