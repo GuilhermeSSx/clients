@@ -282,26 +282,49 @@ os quatro IDs das lojas. A edição manual dura uma sessão.
 
 ### Mantendo a correção entre reinícios
 
-`~\bin\bitwarden-fork-biometria.ps1`, lançado por `bitwarden-fork-biometria.cmd`.
+`~\bin\bitwarden-fork-biometria.ps1`, disparado no logon pela tarefa agendada
+**"Bitwarden fork - biometria"**. `bitwarden-fork-biometria.cmd` ao lado serve só para
+execução avulsa.
 
 Ele não aplica uma vez e sai, porque perderia a corrida: no logon o script e o app sobem
 juntos, o script é rápido, o app é Electron e demora — aplicar de imediato seria
-sobrescrito segundos depois. Em vez disso reaplica a cada cinco segundos por uma janela de
-seis minutos, o que cobre o app subindo atrasado. É idempotente: se o ID já está lá, não
-faz nada.
+sobrescrito segundos depois.
+
+Também não fica preso a um tempo fixo. Espera o processo `Bitwarden` aparecer, cobre os 45
+segundos seguintes reaplicando a cada 3 s, confirma e encerra. Se o app não aparecer em 5
+minutos, aplica assim mesmo e sai. É idempotente: se o ID já está lá, não faz nada.
 
 Grava em UTF-8 sem BOM via `File.WriteAllText` com `UTF8Encoding($false)`, e não por
 `Set-Content -Encoding utf8`, que no PowerShell 5.1 escreveria BOM e quebraria a leitura
 do arquivo pelo Chrome.
 
-Registra o que fez em `%APPDATA%\Bitwarden\browsers\fork-biometria.log`.
+Cada volta do laço é isolada. Sem isso o script morre: com `$ErrorActionPreference = "Stop"`
+uma leitura que falhe por disputa de arquivo encerra tudo — e essa disputa acontece
+exatamente quando o app está gravando, que é o instante em que a correção mais precisa
+sobreviver. A primeira versão caiu em menos de um minuto por causa disso, sem registrar
+encerramento no log.
 
-Verificado removendo o ID à mão e confirmando que volta, que o arquivo continua sem BOM e
-que `name`, `type` e `path` permanecem intactos.
+Registra o resultado em `%APPDATA%\Bitwarden\browsers\fork-biometria.log`, uma linha por
+execução.
+
+### Por que tarefa agendada e não atalho na inicialização
+
+A primeira tentativa foi um atalho em `Startup` com janela minimizada. Não funciona: a
+janela do console aparece em primeiro plano assim mesmo, e com um laço de seis minutos ela
+ficava ocupando a tela o tempo todo.
+
+`New-ScheduledTaskSettingsSet -Hidden` mais `-WindowStyle Hidden` resolvem de verdade.
+A tarefa roda como o usuário, sem elevação (`RunLevel Limited`), e termina sozinha.
+
+Verificado por execução: o ID foi removido à mão, a tarefa foi disparada, o ID voltou em 6
+segundos, **zero processos com janela visível**, a tarefa terminou com resultado `0` e o
+log registrou `fim em 45s | app visto | reaplicacoes: 1 | ID presente: True`. Nenhum
+processo ficou pendurado. O arquivo permanece sem BOM e com `name`, `type` e `path`
+intactos.
 
 **O que ainda não cobre:** se o app desktop reiniciar no meio do dia — atualização, queda,
-reinício manual — a janela já terminou e a biometria quebra até o próximo boot. Nesse caso,
-clique duplo no `.cmd`.
+reinício manual — a tarefa já terminou e a biometria quebra até o próximo logon. Nesse
+caso, clique duplo no `.cmd`.
 
 **Alternativa sem nada disso:** o desbloqueio por PIN passa por `PinServiceAbstraction`,
 dentro da própria extensão, e não toca em native messaging. Não quebra em boot nem em
