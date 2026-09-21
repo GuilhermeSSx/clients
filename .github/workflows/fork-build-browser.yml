@@ -77,8 +77,12 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: chrome-dev-${{ github.sha }}
+          # tools e o runbook viajam junto de proposito: assim instalar numa
+          # maquina nova é um download só, sem clone, sem Node e sem compilar.
           path: |
             apps/browser/build
             apps/browser/build-files.sha256
+            tools/windows
+            docs/instalar-em-outra-maquina.md
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
