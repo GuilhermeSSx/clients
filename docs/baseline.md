@@ -76,6 +76,8 @@ cd apps/browser
 npm_config_script_shell="C:\\Program Files\\Git\\bin\\bash.exe" npm run build:dev:chrome
 ```
 
+O passo 4 acima é Git Bash. No PowerShell a sintaxe é outra — veja logo abaixo.
+
 ### A pegadinha que custou uma sessão
 
 Duas armadilhas se combinam no Windows.
@@ -99,12 +101,28 @@ Aconteceu em 2026-09-20: três builds seguidos sem reaplicar a chave, o ID mudou
 `mfpkfneejkegaphnaebeojnkkimbaodk` para `acklnbnimhjndpeicokcijniiaedkggb`, e o menu
 sumiu.
 
-**Use sempre o comando único**, verificado nesta máquina:
+**Use sempre o comando único.** A sintaxe muda conforme o shell, e essa diferença já
+derrubou um teste de instalação do zero.
+
+No PowerShell, que é o padrão do Windows:
+
+```powershell
+cd apps/browser
+$env:npm_config_script_shell = "C:\Program Files\Git\bin\bash.exe"
+npm run build:dev:chrome
+```
+
+No Git Bash:
 
 ```bash
 cd apps/browser
 npm_config_script_shell="C:\Program Files\Git\bin\bash.exe" npm run build:dev:chrome
 ```
+
+`VAR=valor comando` é sintaxe de shell POSIX. O PowerShell não a reconhece e responde
+`The term 'npm_config_script_shell=…' is not recognized as a name of a cmdlet`, o que soa
+como npm quebrado e não como erro de sintaxe. Com `$env:` a variável fica definida pelo
+resto da sessão, então basta uma vez por janela.
 
 A variável vale só para aquela invocação; nenhum arquivo do repositório é alterado. O
 `update-manifest-dev.sh` escreve apenas em `apps/browser/build/manifest.json`, que é saída

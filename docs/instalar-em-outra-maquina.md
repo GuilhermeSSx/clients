@@ -44,6 +44,20 @@ Dois caminhos. O segundo é mais rápido e não exige nada instalado.
 
 ### Caminho A: compilar
 
+**No PowerShell**, que é o que abre por padrão no Windows:
+
+```powershell
+git clone https://github.com/GuilhermeSSx/clients.git
+cd clients
+git switch base/upstream
+npm ci
+cd apps/browser
+$env:npm_config_script_shell = "C:\Program Files\Git\bin\bash.exe"
+npm run build:dev:chrome
+```
+
+**No Git Bash**, a variável vai como prefixo, na mesma linha:
+
 ```bash
 git clone https://github.com/GuilhermeSSx/clients.git
 cd clients
@@ -52,6 +66,11 @@ npm ci
 cd apps/browser
 npm_config_script_shell="C:\Program Files\Git\bin\bash.exe" npm run build:dev:chrome
 ```
+
+Escolha um e siga até o fim. Misturar os dois é o erro mais fácil de cometer: a forma
+`VAR=valor comando` é sintaxe de shell POSIX e **não existe no PowerShell**, onde falha com
+`The term 'npm_config_script_shell=…' is not recognized as a name of a cmdlet`. A mensagem
+parece problema do npm, mas é só sintaxe.
 
 Gera `apps/browser/build`. Leva por volta de 3 minutos e ocupa cerca de 3 GB entre clone,
 `node_modules` e saída. Nunca use `npm run build:chrome` sozinho: o motivo está em

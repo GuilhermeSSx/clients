@@ -84,17 +84,30 @@ que ainda não se viu.
 
 ## Rotina de rebase
 
-```bash
+No PowerShell, que é o padrão do Windows:
+
+```powershell
 git pull --rebase origin base/upstream
 git fetch upstream --tags
 git rebase browser-v<nova-tag>
 
 npm ci
 cd apps/browser
-npm_config_script_shell="C:\Program Files\Git\bin\bash.exe" npm run build:dev:chrome
+$env:npm_config_script_shell = "C:\Program Files\Git\bin\bash.exe"
+npm run build:dev:chrome
 cd ../..
+
 npx jest apps/browser/src/autofill
 ```
+
+No Git Bash, a variável vai como prefixo na mesma linha:
+
+```bash
+npm_config_script_shell="C:\Program Files\Git\bin\bash.exe" npm run build:dev:chrome
+```
+
+`VAR=valor comando` não existe no PowerShell e falha com `is not recognized as a name of a
+cmdlet`. Detalhes em `baseline.md`.
 
 Conferir o ID depois do build. Detalhes e a pegadinha da chave de desenvolvimento estão em
 `docs/baseline.md`.

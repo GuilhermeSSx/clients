@@ -105,10 +105,24 @@ Sem números de linha de propósito: eles mudam a cada rebase. Procure pelos sí
 
 ### Sempre use o comando único de build
 
+No PowerShell, que é o padrão do Windows:
+
+```powershell
+cd apps/browser
+$env:npm_config_script_shell = "C:\Program Files\Git\bin\bash.exe"
+npm run build:dev:chrome
+```
+
+No Git Bash:
+
 ```bash
 cd apps/browser
 npm_config_script_shell="C:\Program Files\Git\bin\bash.exe" npm run build:dev:chrome
 ```
+
+A forma `VAR=valor comando` é sintaxe de shell POSIX e **não existe no PowerShell**. Lá ela
+falha com `The term 'npm_config_script_shell=…' is not recognized`. No PowerShell a variável
+é definida antes, com `$env:`, e vale pelo resto da sessão.
 
 **Nunca rode `npm run build:chrome` sozinho.** Ele regenera `build/manifest.json` do
 código-fonte e, ao fazer isso, apaga a chave de desenvolvimento que o
