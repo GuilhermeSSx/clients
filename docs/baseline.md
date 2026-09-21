@@ -263,12 +263,50 @@ o Chrome inteiro — todas as janelas — e reabrir.
 O `desktop_proxy.exe` não mantém lista própria — essa verificação só existe uma vez, na
 escrita do manifesto. Editar o arquivo basta.
 
-### Isso se perde
+### Isso se perde em toda inicialização, não só ao alternar o botão
 
-O app desktop reescreve `chrome.json` toda vez que a integração com o navegador é ligada
-ou desligada, e provavelmente ao atualizar o app. **Não alterne aquele botão**: ligar e
-desligar "só para conferir" apaga o ID e quebra a biometria de novo. Se quebrar, reaplique
-o comando acima.
+A primeira versão desta nota dizia que bastava não alternar a integração com o navegador.
+Está errado. `apps/desktop/src/main.ts` chama `generateManifests()` no caminho de
+inicialização do app, **sem depender da configuração** — só a integração com o DuckDuckGo
+é condicional:
+
+```ts
+try {
+  await this.nativeMessagingMain.generateManifests();
+  await this.nativeMessagingMain.listen();
+} catch (err) {
+```
+
+Ou seja, todo boot, toda abertura do app e toda atualização regravam o arquivo com apenas
+os quatro IDs das lojas. A edição manual dura uma sessão.
+
+### Mantendo a correção entre reinícios
+
+`~\bin\bitwarden-fork-biometria.ps1`, lançado por `bitwarden-fork-biometria.cmd`.
+
+Ele não aplica uma vez e sai, porque perderia a corrida: no logon o script e o app sobem
+juntos, o script é rápido, o app é Electron e demora — aplicar de imediato seria
+sobrescrito segundos depois. Em vez disso reaplica a cada cinco segundos por uma janela de
+seis minutos, o que cobre o app subindo atrasado. É idempotente: se o ID já está lá, não
+faz nada.
+
+Grava em UTF-8 sem BOM via `File.WriteAllText` com `UTF8Encoding($false)`, e não por
+`Set-Content -Encoding utf8`, que no PowerShell 5.1 escreveria BOM e quebraria a leitura
+do arquivo pelo Chrome.
+
+Registra o que fez em `%APPDATA%\Bitwarden\browsers\fork-biometria.log`.
+
+Verificado removendo o ID à mão e confirmando que volta, que o arquivo continua sem BOM e
+que `name`, `type` e `path` permanecem intactos.
+
+**O que ainda não cobre:** se o app desktop reiniciar no meio do dia — atualização, queda,
+reinício manual — a janela já terminou e a biometria quebra até o próximo boot. Nesse caso,
+clique duplo no `.cmd`.
+
+**Alternativa sem nada disso:** o desbloqueio por PIN passa por `PinServiceAbstraction`,
+dentro da própria extensão, e não toca em native messaging. Não quebra em boot nem em
+atualização, e não precisa de script. Foi descartado aqui por preferência pelo Windows
+Hello, não por limitação técnica.
 
 ### O que isso significa
 
@@ -278,10 +316,12 @@ destravar o cofre. Acrescentar um ID concede esse direito à extensão correspon
 
 ### Impacto na trilha corporativa
 
-Cada máquina da equipe teria o mesmo bloqueio. As saídas são empurrar um `chrome.json`
-ajustado por GPO ou script de logon, forkar também o app desktop, ou abrir mão de
-biometria. Nem o plano original nem a Fase 4 dimensionavam isso; entra na conta antes de
-decidir pela distribuição interna.
+Cada máquina da equipe teria o mesmo bloqueio, e a cada logon, não uma vez só. Como
+o app regrava o arquivo em toda inicialização, não bastaria empurrar um `chrome.json`
+ajustado por GPO: seria preciso um script de logon em cada máquina, competindo com a
+inicialização do próprio Bitwarden. As outras saídas são forkar também o app desktop,
+o que é grande demais, ou padronizar o desbloqueio por PIN. Nem o plano original nem a
+Fase 4 dimensionavam isso; entra na conta antes de decidir pela distribuição interna.
 
 ## Validação manual — resultado
 
